@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 import config
+from modbus.diagnostic_lock import RS485_DIAGNOSTIC_LOCK
 
 
 _VFD_DEVICES = (
@@ -61,36 +62,38 @@ class _VFDReadWorker(QThread):
             values = {}
             errors = []
             try:
-                instrument = Instrument(self.port, slave_id, mode=MODE_RTU)
-                instrument.serial.baudrate = config.BAUDRATE
-                instrument.serial.bytesize = config.RS485_BYTESIZE
-                instrument.serial.parity = parity
-                instrument.serial.stopbits = config.RS485_STOPBITS
-                instrument.serial.timeout = config.RS485_TIMEOUT
-                instrument.clear_buffers_before_each_transaction = True
-                instrument.close_port_after_each_call = False
+                with RS485_DIAGNOSTIC_LOCK:
+                    instrument = Instrument(self.port, slave_id, mode=MODE_RTU)
+                    instrument.serial.baudrate = config.BAUDRATE
+                    instrument.serial.bytesize = config.RS485_BYTESIZE
+                    instrument.serial.parity = parity
+                    instrument.serial.stopbits = config.RS485_STOPBITS
+                    instrument.serial.timeout = config.RS485_TIMEOUT
+                    instrument.clear_buffers_before_each_transaction = True
+                    instrument.close_port_after_each_call = False
 
-                for key, register in (
-                    ("frequency_raw", config.REG_GK610_FREQ_OUT),
-                    ("current_raw", config.REG_GK610_CURRENT),
-                    ("dc_bus_raw", config.REG_GK610_DC_BUS),
-                ):
-                    try:
-                        values[key] = instrument.read_register(
-                            register,
-                            number_of_decimals=0,
-                            functioncode=3,
-                            signed=False,
-                        )
-                    except (ModbusException, serial.SerialException, OSError, ValueError) as exc:
-                        errors.append(f"0x{register:04X}: {exc}")
-                    time.sleep(config.RS485_INTER_FRAME_DELAY)
+                    for key, register in (
+                        ("frequency_raw", config.REG_GK610_FREQ_OUT),
+                        ("current_raw", config.REG_GK610_CURRENT),
+                        ("dc_bus_raw", config.REG_GK610_DC_BUS),
+                    ):
+                        try:
+                            values[key] = instrument.read_register(
+                                register,
+                                number_of_decimals=0,
+                                functioncode=3,
+                                signed=False,
+                            )
+                        except (ModbusException, serial.SerialException, OSError, ValueError) as exc:
+                            errors.append(f"0x{register:04X}: {exc}")
+                        time.sleep(config.RS485_INTER_FRAME_DELAY)
             except (ModbusException, serial.SerialException, OSError, ValueError) as exc:
                 errors.append(str(exc))
             finally:
                 if instrument is not None:
                     try:
-                        instrument.serial.close()
+                        with RS485_DIAGNOSTIC_LOCK:
+                            instrument.serial.close()
                     except (serial.SerialException, OSError):
                         errors.append("No se pudo cerrar el puerto serie limpiamente.")
 

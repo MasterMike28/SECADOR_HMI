@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 import config
+from ui.ebyte_pt100_window import EbytePT100Window
 from ui.rs485_test_window import RS485TestWindow
 
 _I2C_LOCK = threading.Lock()
@@ -127,6 +128,7 @@ class TestModeWindow(QDialog):
         self._i2c_worker = None
         self._pulse_worker = None
         self._rs485_test_window = None
+        self._ebyte_pt100_window = None
         self._active_channel = None
         self._output_state_unknown = False
         self._channel_buttons = []
@@ -230,6 +232,9 @@ class TestModeWindow(QDialog):
         self.read_rs485_button = QPushButton("PROBAR RS485 (LECTURA)")
         self.read_rs485_button.clicked.connect(self.open_rs485_test)
         self.read_rs485_button.setMaximumWidth(205)
+        self.read_pt100_button = QPushButton("PT100 EBYTE")
+        self.read_pt100_button.clicked.connect(self.open_ebyte_pt100_test)
+        self.read_pt100_button.setMaximumWidth(150)
         self.close_button = QPushButton("CERRAR")
         self.close_button.setStyleSheet(
             "QPushButton { background-color: #374151; border-color: #6B7280; }"
@@ -237,6 +242,7 @@ class TestModeWindow(QDialog):
         self.close_button.clicked.connect(self.close)
         buttons.addWidget(self.read_i2c_button)
         buttons.addWidget(self.read_rs485_button)
+        buttons.addWidget(self.read_pt100_button)
         buttons.addStretch()
         buttons.addWidget(self.close_button)
         layout.addLayout(buttons)
@@ -272,6 +278,13 @@ class TestModeWindow(QDialog):
         self._rs485_test_window.show()
         self._rs485_test_window.raise_()
         self._rs485_test_window.activateWindow()
+
+    def open_ebyte_pt100_test(self):
+        if self._ebyte_pt100_window is None:
+            self._ebyte_pt100_window = EbytePT100Window(self)
+        self._ebyte_pt100_window.show()
+        self._ebyte_pt100_window.raise_()
+        self._ebyte_pt100_window.activateWindow()
 
     def activate_output(self, channel):
         if not 0 <= channel < _RELAY_INPUT_COUNT:
@@ -375,6 +388,11 @@ class TestModeWindow(QDialog):
             (
                 self._rs485_test_window._worker
                 if self._rs485_test_window is not None
+                else None
+            ),
+            (
+                self._ebyte_pt100_window._worker
+                if self._ebyte_pt100_window is not None
                 else None
             ),
         ]
