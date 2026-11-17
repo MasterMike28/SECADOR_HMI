@@ -3,27 +3,135 @@
 
 import threading
 import time
+from urllib.parse import quote
 
 from smbus2 import SMBus, i2c_msg
-from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtCore import QSettings, QThread, Signal, Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 import config
+from instrumentation import INSTRUMENTATION, OPTIONAL_INSTRUMENTATION
 from ui.ebyte_pt100_window import EbytePT100Window
+from ui.gpio_test_window import GPIODirectTestWindow
 from ui.rs485_test_window import RS485TestWindow
+from ui.waveshare_analog_window import WaveshareAnalogWindow
 
 _I2C_LOCK = threading.Lock()
 _RELAY_INPUT_COUNT = 8
 _MAX_HOLD_DURATION_S = 5.0
+_TEST_RESULTS = ("Pendiente", "Correcto", "Falla", "Por definir", "No aplica")
+
+
+def _build_test_inventory():
+    inventory = [
+        (
+            "PCF8575 / I2C",
+            f"Leer el expansor en bus {config.I2C_BUS}, "
+            f"dirección 0x{config.PCF8575_ADDR:02X}; sin escribir.",
+            "Pendiente",
+        ),
+        (
+            "Adaptador y bus RS485",
+            "Verificar puerto, alimentación, polaridad A/B y respuesta de un "
+            "esclavo a la vez.",
+            "Pendiente",
+        ),
+        (
+            "EBYTE ME31-XDXX0800-485",
+            "Leer los ocho registros PT100 por FC04; revisar sensores "
+            "desconectados y temperatura.",
+            "Pendiente",
+        ),
+        (
+            "Waveshare Analog Input 8CH (SKU 25821)",
+            "Leer ocho entradas por FC04 en modo corriente 0–20 mA; "
+            "comprobar la conversión µA a mA.",
+            "Pendiente",
+        ),
+        (
+            "VFD tambor / GK610 (ID 1)",
+            "Consultar frecuencia, corriente y bus DC; prueba de solo lectura.",
+            "Pendiente",
+        ),
+        (
+            "VFD ventilador / GK610 (ID 2)",
+            "Consultar frecuencia, corriente y bus DC; prueba de solo lectura.",
+            "Pendiente",
+        ),
+    ]
+
+    for channel in range(_RELAY_INPUT_COUNT):
+        inventory.append(
+            (
+                f"Salida P{channel} → ULN → K{channel + 1}",
+                "Con cargas aisladas: pulsar la salida, observar LED/relé y "
+                "confirmar que se desactiva al soltar.",
+                "Pendiente",
+            )
+        )
+
+    inventory.extend(
+        (
+            (
+                "Sensor óptico / tacómetro",
+                f"Confirmar pulsos en GPIO {config.GPIO_OPTICO} al pasar la marca.",
+                "Pendiente",
+            ),
+            (
+                "Sensor inductivo / referencia",
+                f"Confirmar cambio de estado en GPIO {config.GPIO_INDUCTIVO}.",
+                "Pendiente",
+            ),
+            (
+                "Sensor de puerta",
+                f"Confirmar detección abierta/cerrada en GPIO {config.GPIO_DOOR_SW}.",
+                "Pendiente",
+            ),
+            (
+                "Parada de emergencia (E-Stop)",
+                f"Validar GPIO {config.GPIO_ESTOP} y, por separado, "
+                "la cadena cableada de seguridad.",
+                "Pendiente",
+            ),
+            (
+                "Máquina de estados del proceso",
+                "Recorrer la secuencia en modo simulado; no acciona hardware.",
+                "Pendiente",
+            ),
+        )
+    )
+
+    for instrument in INSTRUMENTATION + OPTIONAL_INSTRUMENTATION:
+        unresolved = any(
+            term in f"{instrument.signal_type} {instrument.acquisition}".lower()
+            for term in ("pendiente", "por definir")
+        )
+        initial_status = "Por definir" if unresolved else "Pendiente"
+        inventory.append(
+            (
+                f"{instrument.tag} — {instrument.variable}",
+                f"Posición {instrument.position}; rango "
+                f"{instrument.range_text} {instrument.units}; "
+                f"señal/adquisición: {instrument.signal_type} / "
+                f"{instrument.acquisition}.",
+                initial_status,
+            )
+        )
+    return inventory
 
 
 def _write_pcf8575_word(bus, value):
@@ -119,7 +227,7 @@ class _PCF8575HoldWorker(QThread):
 
 
 class TestModeWindow(QDialog):
-    """Permite leer el PCF8575 y accionar una entrada mientras se mantiene pulsada."""
+    """Reúne pruebas individuales y el inventario de componentes de la máquina."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -129,9 +237,12 @@ class TestModeWindow(QDialog):
         self._pulse_worker = None
         self._rs485_test_window = None
         self._ebyte_pt100_window = None
+        self._waveshare_analog_window = None
+        self._gpio_test_window = None
         self._active_channel = None
         self._output_state_unknown = False
         self._channel_buttons = []
+        self._settings = QSettings("SECADOR_HMI", "PuestaEnMarcha")
         self.setStyleSheet(
             "QDialog { background-color: #111827; color: #F3F4F6; }"
             "QLabel { color: #F3F4F6; font-size: 11px; }"
@@ -146,7 +257,13 @@ class TestModeWindow(QDialog):
             "QCheckBox { color: #FBBF24; font-size: 11px; font-weight: bold; }"
         )
 
-        layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(5, 5, 5, 5)
+        self.tabs = QTabWidget()
+        root_layout.addWidget(self.tabs)
+
+        self.io_tab = QWidget()
+        layout = QVBoxLayout(self.io_tab)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(5)
 
@@ -228,13 +345,13 @@ class TestModeWindow(QDialog):
         buttons = QHBoxLayout()
         self.read_i2c_button = QPushButton("LEER I2C (NO ESCRIBE)")
         self.read_i2c_button.clicked.connect(self.test_pcf8575_read_only)
-        self.read_i2c_button.setMaximumWidth(185)
+        self.read_i2c_button.setMaximumWidth(165)
         self.read_rs485_button = QPushButton("PROBAR RS485 (LECTURA)")
         self.read_rs485_button.clicked.connect(self.open_rs485_test)
-        self.read_rs485_button.setMaximumWidth(205)
+        self.read_rs485_button.setMaximumWidth(185)
         self.read_pt100_button = QPushButton("PT100 EBYTE")
         self.read_pt100_button.clicked.connect(self.open_ebyte_pt100_test)
-        self.read_pt100_button.setMaximumWidth(150)
+        self.read_pt100_button.setMaximumWidth(120)
         self.close_button = QPushButton("CERRAR")
         self.close_button.setStyleSheet(
             "QPushButton { background-color: #374151; border-color: #6B7280; }"
@@ -246,6 +363,195 @@ class TestModeWindow(QDialog):
         buttons.addStretch()
         buttons.addWidget(self.close_button)
         layout.addLayout(buttons)
+        self.tabs.addTab(self.io_tab, "I/O Y COMUNICACIONES")
+        self._create_analog_gpio_tab()
+        self._create_inventory_tab()
+
+    def _create_analog_gpio_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        title = QLabel(
+            "Pruebas puntuales de las entradas analógicas Waveshare y de los "
+            "pines GPIO de la Raspberry Pi."
+        )
+        title.setWordWrap(True)
+        title.setStyleSheet("font-weight: bold; color: #5EEAD4; font-size: 13px;")
+        layout.addWidget(title)
+
+        analog_info = QLabel(
+            "Waveshare SKU 25821: lectura FC04 de 8 canales, en modo corriente "
+            "0–20 mA. Confirma los jumpers y el rango configurado; no se "
+            "escribe ninguna configuración. Requiere alimentación de 7–36 V "
+            "y un adaptador RS485; no conectes el bus A/B directamente al UART "
+            "de la Raspberry. Su ID de ejemplo 1 coincide con el EBYTE y el "
+            "VFD del tambor: prueba un equipo a la vez."
+        )
+        analog_info.setWordWrap(True)
+        analog_info.setStyleSheet("color: #FBBF24;")
+        layout.addWidget(analog_info)
+
+        self.read_waveshare_button = QPushButton("LEER WAVESHARE — 8 CANALES")
+        self.read_waveshare_button.clicked.connect(self.open_waveshare_analog_test)
+        self.read_waveshare_button.setMaximumWidth(320)
+        layout.addWidget(self.read_waveshare_button)
+
+        gpio_info = QLabel(
+            f"Entradas directas BCM {config.GPIO_ESTOP}, "
+            f"{config.GPIO_INDUCTIVO}, {config.GPIO_OPTICO} y "
+            f"{config.GPIO_DOOR_SW}. Usa solo señales adaptadas a 3,3 V; "
+            "leer el pin E-Stop no prueba la cadena cableada."
+        )
+        gpio_info.setWordWrap(True)
+        gpio_info.setStyleSheet("color: #FBBF24;")
+        layout.addWidget(gpio_info)
+
+        self.read_gpio_button = QPushButton("LEER GPIO DIRECTOS")
+        self.read_gpio_button.clicked.connect(self.open_gpio_direct_test)
+        self.read_gpio_button.setMaximumWidth(260)
+        layout.addWidget(self.read_gpio_button)
+        layout.addStretch()
+        self.tabs.addTab(page, "ANALÓGICO / GPIO")
+
+    def _create_inventory_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(5)
+
+        guidance = QLabel(
+            "Lista de los componentes previstos. Actualiza el resultado y "
+            "anota mediciones o fallas. Los datos se guardan en este equipo; "
+            "copia el informe para compartirlo."
+        )
+        guidance.setWordWrap(True)
+        guidance.setStyleSheet("color: #FBBF24; font-weight: bold;")
+        layout.addWidget(guidance)
+
+        self.inventory_table = QTableWidget()
+        self.inventory_table.setColumnCount(4)
+        self.inventory_table.setHorizontalHeaderLabels(
+            ("Componente / TAG", "Verificación sugerida", "Resultado", "Observación")
+        )
+        inventory = _build_test_inventory()
+        self.inventory_table.setRowCount(len(inventory))
+        self.inventory_table.verticalHeader().setVisible(False)
+        self.inventory_table.setAlternatingRowColors(True)
+        self.inventory_table.setStyleSheet(
+            "QTableWidget { alternate-background-color: #273449; }"
+        )
+        self.inventory_table.setWordWrap(True)
+        self.inventory_table.setColumnWidth(0, 185)
+        self.inventory_table.setColumnWidth(2, 105)
+        self.inventory_table.setColumnWidth(3, 200)
+        self.inventory_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.Stretch
+        )
+        self.inventory_table.setMinimumHeight(285)
+        self.inventory_table.setEditTriggers(
+            QTableWidget.EditTrigger.DoubleClicked
+            | QTableWidget.EditTrigger.EditKeyPressed
+            | QTableWidget.EditTrigger.AnyKeyPressed
+        )
+        self._inventory_rows = []
+        for row, (component, test_description, initial_status) in enumerate(inventory):
+            component_item = QTableWidgetItem(component)
+            component_item.setFlags(component_item.flags() & ~Qt.ItemIsEditable)
+            self.inventory_table.setItem(row, 0, component_item)
+            test_item = QTableWidgetItem(test_description)
+            test_item.setFlags(test_item.flags() & ~Qt.ItemIsEditable)
+            self.inventory_table.setItem(row, 1, test_item)
+            status = QComboBox()
+            status.addItems(_TEST_RESULTS)
+            settings_key = self._inventory_settings_key(component)
+            saved_status = self._settings.value(
+                f"{settings_key}/status", initial_status
+            )
+            status.setCurrentText(
+                saved_status if saved_status in _TEST_RESULTS else initial_status
+            )
+            self.inventory_table.setCellWidget(row, 2, status)
+            observation = QTableWidgetItem(
+                self._settings.value(f"{settings_key}/observation", "", type=str)
+            )
+            self.inventory_table.setItem(row, 3, observation)
+            self._inventory_rows.append((component, test_description, status, observation))
+            status.currentTextChanged.connect(
+                lambda _value, item=component: self._save_inventory_result(item)
+            )
+        self.inventory_table.itemChanged.connect(self._inventory_item_changed)
+        layout.addWidget(self.inventory_table)
+
+        footer = QHBoxLayout()
+        self.inventory_result_label = QLabel(
+            f"{len(self._inventory_rows)} elementos registrados; "
+            "las pruebas físicas se anotan manualmente."
+        )
+        self.inventory_result_label.setWordWrap(True)
+        footer.addWidget(self.inventory_result_label, 1)
+        self.copy_report_button = QPushButton("COPIAR INFORME")
+        self.copy_report_button.clicked.connect(self.copy_test_report)
+        footer.addWidget(self.copy_report_button)
+        self.tabs.addTab(page, "INVENTARIO Y RESULTADOS")
+
+    @staticmethod
+    def _inventory_settings_key(component):
+        return f"inventory/{quote(component, safe='')}"
+
+    def _inventory_item_changed(self, item):
+        if item.column() != 3:
+            return
+        component = self.inventory_table.item(item.row(), 0).text()
+        self._save_inventory_result(component)
+
+    def _save_inventory_result(self, component):
+        row = next(
+            row
+            for row, entry in enumerate(self._inventory_rows)
+            if entry[0] == component
+        )
+        _, _, status, observation = self._inventory_rows[row]
+        settings_key = self._inventory_settings_key(component)
+        self._settings.setValue(f"{settings_key}/status", status.currentText())
+        self._settings.setValue(f"{settings_key}/observation", observation.text())
+        self._settings.sync()
+        if self._settings.status() != QSettings.Status.NoError:
+            self.inventory_result_label.setText(
+                "Error: no se pudieron guardar los resultados en este equipo."
+            )
+            self.inventory_result_label.setStyleSheet("color: #F87171;")
+            return
+        self.inventory_result_label.setText(f"Resultado guardado: {component}.")
+        self.inventory_result_label.setStyleSheet("color: #34D399;")
+
+    def copy_test_report(self):
+        counts = {result: 0 for result in _TEST_RESULTS}
+        report_lines = [
+            "INFORME DE PRUEBAS — SECADOR_HMI",
+            "Resultados anotados por el usuario; no son una confirmación "
+            "automática de hardware.",
+        ]
+        for component, test_description, status, observation in self._inventory_rows:
+            result = status.currentText()
+            counts[result] += 1
+            note = observation.text().strip() or "sin observación"
+            report_lines.append(
+                f"- {component}: {result}. {note} "
+                f"(prueba: {test_description})"
+            )
+        summary = ", ".join(
+            f"{result}: {count}"
+            for result, count in counts.items()
+            if count
+        )
+        report_lines.insert(2, f"Resumen: {summary}.")
+        QApplication.clipboard().setText("\n".join(report_lines))
+        self.inventory_result_label.setText(
+            "Informe copiado. Pégalo en el chat e indica el componente "
+            "que probaste."
+        )
 
     def _update_pulse_buttons_enabled(self, isolated):
         can_pulse = (
@@ -285,6 +591,20 @@ class TestModeWindow(QDialog):
         self._ebyte_pt100_window.show()
         self._ebyte_pt100_window.raise_()
         self._ebyte_pt100_window.activateWindow()
+
+    def open_waveshare_analog_test(self):
+        if self._waveshare_analog_window is None:
+            self._waveshare_analog_window = WaveshareAnalogWindow(self)
+        self._waveshare_analog_window.show()
+        self._waveshare_analog_window.raise_()
+        self._waveshare_analog_window.activateWindow()
+
+    def open_gpio_direct_test(self):
+        if self._gpio_test_window is None:
+            self._gpio_test_window = GPIODirectTestWindow(self)
+        self._gpio_test_window.show()
+        self._gpio_test_window.raise_()
+        self._gpio_test_window.activateWindow()
 
     def activate_output(self, channel):
         if not 0 <= channel < _RELAY_INPUT_COUNT:
@@ -393,6 +713,16 @@ class TestModeWindow(QDialog):
             (
                 self._ebyte_pt100_window._worker
                 if self._ebyte_pt100_window is not None
+                else None
+            ),
+            (
+                self._waveshare_analog_window._worker
+                if self._waveshare_analog_window is not None
+                else None
+            ),
+            (
+                self._gpio_test_window._worker
+                if self._gpio_test_window is not None
                 else None
             ),
         ]

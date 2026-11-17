@@ -74,6 +74,13 @@ EBYTE_PT100_READ_FUNCTION_CODE = 4
 EBYTE_PT100_SCALE_C_PER_COUNT = 0.1
 EBYTE_PT100_SENSOR_FAULT_RAW = 0xFC19
 
+# Diagnóstico del Waveshare Modbus RTU Analog Input 8CH (SKU 25821).
+WAVESHARE_AI_DEFAULT_SLAVE_ID = 1
+WAVESHARE_AI_REGISTER = 0x0000
+WAVESHARE_AI_CHANNEL_COUNT = 8
+WAVESHARE_AI_READ_FUNCTION_CODE = 4
+WAVESHARE_AI_SCALE_MA_PER_REGISTER = 0.001  # Registros en µA, presentación en mA.
+
 
 # ---------------------------------------------------------------------------
 # Variadores GTAKE GK610
