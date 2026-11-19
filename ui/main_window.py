@@ -6,13 +6,28 @@ from datetime import datetime
 from serial.tools import list_ports
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QDialog, QComboBox, 
     QMessageBox, QDoubleSpinBox, QGroupBox
 )
 from PySide6.QtCore import Qt, QTimer
 
 import config
+from ui.theme import (
+    BORDER,
+    DIALOG_STYLESHEET,
+    ERROR,
+    ERROR_BG,
+    SUCCESS,
+    SUCCESS_BG,
+    SURFACE,
+    TEXT,
+    TEXT_MUTED,
+    WARNING,
+    WARNING_BG,
+    WINDOW,
+    status_label_style,
+)
 from ui.process_view import ProcessView
 from ui.dialog_etapa import EtapaConfirmDialog
 from ui.event_windows import AlarmWindow, HistoryWindow
@@ -26,12 +41,7 @@ class ConfigDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Configuración de Puerto RS485")
         self.setFixedSize(360, 180)
-        self.setStyleSheet("""
-            QDialog { background-color: #111827; color: white; border: 2px solid #374151; }
-            QLabel { color: #F3F4F6; font-size: 13px; font-weight: bold; }
-            QComboBox { background-color: #1F2937; color: #10B981; padding: 8px; font-size: 14px; font-weight: bold; border: 1px solid #4B5563; border-radius: 4px; }
-            QPushButton { padding: 8px; font-weight: bold; border-radius: 4px; font-size: 12px; }
-        """)
+        self.setStyleSheet(DIALOG_STYLESHEET)
         
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Seleccione el puerto RS485 detectado:"))
@@ -72,7 +82,7 @@ class ControlMotorDialog(QDialog):
         self.parent_window = parent
         self.setWindowTitle("Control Motor - Tambor Liofilizador")
         self.setFixedSize(460, 320)
-        self.setStyleSheet("background-color: #111827; color: white; font-size: 14px;")
+        self.setStyleSheet(DIALOG_STYLESHEET)
 
         layout = QVBoxLayout(self)
 
@@ -84,10 +94,15 @@ class ControlMotorDialog(QDialog):
         self.input_hz.setSuffix(" Hz")
         self.input_hz.setSingleStep(1.0)
         self.input_hz.setMinimumHeight(35)
-        self.input_hz.setStyleSheet("background-color: #1F2937; color: #10B981; font-weight: bold;")
+        self.input_hz.setStyleSheet(
+            f"background-color: {SURFACE}; color: #10B981; font-weight: bold;"
+        )
         
         btn_set_hz = QPushButton("Enviar Frecuencia")
-        btn_set_hz.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; border-radius: 4px;")
+        btn_set_hz.setStyleSheet(
+            "background-color: #10B981; color: white; font-weight: bold; "
+            "border-radius: 4px;"
+        )
         btn_set_hz.setMinimumHeight(35)
         btn_set_hz.clicked.connect(self.enviar_frecuencia)
         
@@ -99,9 +114,15 @@ class ControlMotorDialog(QDialog):
         grupo_giro = QGroupBox("Sentido de Giro (Marcha)")
         layout_giro = QHBoxLayout()
         btn_fwd = QPushButton("▶ Adelante (FWD)")
-        btn_fwd.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 10px; border-radius: 4px;")
+        btn_fwd.setStyleSheet(
+            "background-color: #10B981; color: white; font-weight: bold; "
+            "padding: 10px; border-radius: 4px;"
+        )
         btn_rev = QPushButton("◀ Reversa (REV)")
-        btn_rev.setStyleSheet("background-color: #F59E0B; color: black; font-weight: bold; padding: 10px; border-radius: 4px;")
+        btn_rev.setStyleSheet(
+            "background-color: #F59E0B; color: black; font-weight: bold; "
+            "padding: 10px; border-radius: 4px;"
+        )
         
         btn_fwd.clicked.connect(lambda: self.enviar_comando(1))
         btn_rev.clicked.connect(lambda: self.enviar_comando(3))
@@ -113,7 +134,10 @@ class ControlMotorDialog(QDialog):
         grupo_stop = QGroupBox("Detención")
         layout_stop = QHBoxLayout()
         btn_stop = QPushButton("🛑 Parar Motor (STOP)")
-        btn_stop.setStyleSheet("background-color: #EF4444; color: white; font-weight: bold; padding: 10px; border-radius: 4px;")
+        btn_stop.setStyleSheet(
+            "background-color: #EF4444; color: white; font-weight: bold; "
+            "padding: 10px; border-radius: 4px;"
+        )
         btn_stop.clicked.connect(lambda: self.enviar_comando(0))
         layout_stop.addWidget(btn_stop)
         grupo_stop.setLayout(layout_stop)
@@ -157,7 +181,7 @@ class SetPointDialog(QDialog):
         self.sensor_id = sensor_id
         self.setWindowTitle(f"Ajustar: {nombre}")
         self.setFixedSize(320, 160)
-        self.setStyleSheet("background-color: #111827; color: white; font-size: 14px;")
+        self.setStyleSheet(DIALOG_STYLESHEET)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"Ingrese nuevo Set Point para {nombre}:"))
@@ -167,14 +191,21 @@ class SetPointDialog(QDialog):
         self.input_val.setValue(valor_actual)
         self.input_val.setDecimals(1)
         self.input_val.setMinimumHeight(38)
-        self.input_val.setStyleSheet("background-color: #1F2937; color: white;")
+        self.input_val.setStyleSheet(
+            f"background-color: {SURFACE}; color: {TEXT};"
+        )
         layout.addWidget(self.input_val)
 
         btn_layout = QHBoxLayout()
         btn_cancelar = QPushButton("Cancelar")
-        btn_cancelar.setStyleSheet("background-color: #374151; color: white; padding: 6px;")
+        btn_cancelar.setStyleSheet(
+            "background-color: #374151; color: white; padding: 6px;"
+        )
         self.btn_guardar = QPushButton("Guardar")
-        self.btn_guardar.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 6px;")
+        self.btn_guardar.setStyleSheet(
+            "background-color: #10B981; color: white; "
+            "font-weight: bold; padding: 6px;"
+        )
         
         btn_cancelar.clicked.connect(self.reject)
         self.btn_guardar.clicked.connect(self.accept)
@@ -190,9 +221,12 @@ class SetPointDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(DIALOG_STYLESHEET)
         self.setWindowTitle(f"{config.APP_NAME} UBB")
         self.setFixedSize(config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
-        self.setStyleSheet("QMainWindow { background-color: #111827; color: #FFFFFF; }")
+        self.setStyleSheet(DIALOG_STYLESHEET)
 
         # Hilo de la Máquina de Estados
         self.worker = LiofilizadoraWorker()
@@ -229,23 +263,30 @@ class MainWindow(QMainWindow):
 
         header = QFrame()
         header.setFixedHeight(52)
-        header.setStyleSheet("background: #111827; border-bottom: 2px solid #374151;")
+        header.setStyleSheet(
+            f"background: {WINDOW}; border-bottom: 1px solid {BORDER};"
+        )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 4, 10, 4)
         header_layout.setSpacing(8)
 
-        titulo = QLabel(f"LIOFILIZADOR UBB  <span style='color:#9CA3AF;font-size:11px'>v{config.APP_VERSION}</span>")
+        titulo = QLabel(
+            f"LIOFILIZADOR UBB  <span style='color:{TEXT_MUTED};"
+            f"font-size:11px'>v{config.APP_VERSION}</span>"
+        )
         titulo.setTextFormat(Qt.RichText)
         titulo.setMinimumWidth(190)
-        titulo.setStyleSheet("color: #FFFFFF; font-size: 15px; font-weight: bold;")
+        titulo.setStyleSheet(
+            f"color: {TEXT}; font-size: 15px; font-weight: bold;"
+        )
 
         self.lbl_estado_proceso = QLabel("●  REPOSO")
         self.lbl_estado_proceso.setAlignment(Qt.AlignCenter)
         self.lbl_estado_proceso.setMinimumHeight(34)
         self.lbl_estado_proceso.setMinimumWidth(190)
         self.lbl_estado_proceso.setStyleSheet(
-            "color: #FBBF24; background-color: #422006; border: 1px solid #B45309; "
-            "border-radius: 6px; padding: 0 8px; font-size: 13px; font-weight: bold;"
+            f"{status_label_style(WARNING, WARNING_BG, '#B45309')} "
+            "font-size: 13px;"
         )
 
         self.estado = QLabel("●  RS485 SIN CONEXIÓN")
@@ -253,8 +294,7 @@ class MainWindow(QMainWindow):
         self.estado.setMinimumHeight(34)
         self.estado.setMinimumWidth(180)
         self.estado.setStyleSheet(
-            "color: #FCA5A5; background-color: #450A0A; border: 1px solid #B91C1C; "
-            "border-radius: 6px; padding: 0 8px; font-size: 12px; font-weight: bold;"
+            f"{status_label_style(ERROR, ERROR_BG, '#B91C1C')} font-size: 12px;"
         )
         self.estado.setToolTip("Variador no conectado. Configure el puerto RS485.")
 
@@ -268,7 +308,9 @@ class MainWindow(QMainWindow):
 
         footer = QFrame()
         footer.setFixedHeight(112)
-        footer.setStyleSheet("background: #111827; border-top: 2px solid #374151;")
+        footer.setStyleSheet(
+            f"background: {WINDOW}; border-top: 1px solid {BORDER};"
+        )
         footer_layout = QVBoxLayout(footer)
         footer_layout.setContentsMargins(8, 6, 8, 6)
         footer_layout.setSpacing(6)
@@ -276,8 +318,9 @@ class MainWindow(QMainWindow):
         self.btn_iniciar = QPushButton("INICIAR PROCESO")
         self.btn_iniciar.setMinimumHeight(48)
         self.btn_iniciar.setStyleSheet(
-            "font-size: 15px; font-weight: bold; background-color: #059669; color: white; "
-            "border: 2px solid #34D399; border-radius: 7px; padding: 0 12px;"
+            "font-size: 15px; font-weight: bold; background-color: #059669; "
+            "color: white; border: 2px solid #34D399; border-radius: 7px; "
+            "padding: 0 12px;"
         )
         self.btn_iniciar.setToolTip("Iniciar el ciclo de proceso")
         self.btn_iniciar.clicked.connect(self.iniciar_proceso_secado)
@@ -285,8 +328,9 @@ class MainWindow(QMainWindow):
         self.btn_stop = QPushButton("PARADA DE EMERGENCIA")
         self.btn_stop.setMinimumHeight(48)
         self.btn_stop.setStyleSheet(
-            "font-size: 15px; font-weight: bold; background-color: #B91C1C; color: white; "
-            "border: 2px solid #F87171; border-radius: 7px; padding: 0 12px;"
+            "font-size: 15px; font-weight: bold; background-color: #B91C1C; "
+            "color: white; border: 2px solid #F87171; border-radius: 7px; "
+            "padding: 0 12px;"
         )
         self.btn_stop.setToolTip("Detener el proceso y apagar las salidas controladas")
         self.btn_stop.clicked.connect(self.detener_proceso)
@@ -307,38 +351,26 @@ class MainWindow(QMainWindow):
             boton = QPushButton(texto)
             boton.setMinimumHeight(44)
             boton.setStyleSheet(
-                "QPushButton { font-size: 13px; font-weight: bold; background-color: #374151; "
-                "color: white; border: 1px solid #6B7280; border-radius: 6px; padding: 0 5px; }"
+                "QPushButton { font-size: 13px; font-weight: bold; "
+                "background-color: #374151; color: white; "
+                "border: 1px solid #6B7280; border-radius: 6px; padding: 0 5px; }"
                 "QPushButton:hover { background-color: #4B5563; }"
                 "QPushButton:pressed { background-color: #1F2937; }"
             )
-            if texto == "MOTOR CÁMARA":
+            nav_colors = {
+                "MOTOR CÁMARA": ("#1D4ED8", "#60A5FA", "#2563EB", "#1E40AF"),
+                "CONFIG": ("#B45309", "#FBBF24", "#D97706", "#92400E"),
+                "ALARMAS": ("#991B1B", "#F87171", "#B91C1C", "#7F1D1D"),
+                "HISTÓRICOS": ("#0F766E", "#5EEAD4", "#0D9488", "#115E59"),
+            }
+            if texto in nav_colors:
+                background, border, hover, pressed = nav_colors[texto]
                 boton.setStyleSheet(
-                    "QPushButton { font-size: 13px; font-weight: bold; background-color: #1D4ED8; "
-                    "color: white; border: 1px solid #60A5FA; border-radius: 6px; padding: 0 5px; }"
-                    "QPushButton:hover { background-color: #2563EB; }"
-                    "QPushButton:pressed { background-color: #1E40AF; }"
-                )
-            elif texto == "CONFIG":
-                boton.setStyleSheet(
-                    "QPushButton { font-size: 13px; font-weight: bold; background-color: #B45309; "
-                    "color: white; border: 1px solid #FBBF24; border-radius: 6px; padding: 0 5px; }"
-                    "QPushButton:hover { background-color: #D97706; }"
-                    "QPushButton:pressed { background-color: #92400E; }"
-                )
-            elif texto == "ALARMAS":
-                boton.setStyleSheet(
-                    "QPushButton { font-size: 13px; font-weight: bold; background-color: #991B1B; "
-                    "color: white; border: 1px solid #F87171; border-radius: 6px; padding: 0 5px; }"
-                    "QPushButton:hover { background-color: #B91C1C; }"
-                    "QPushButton:pressed { background-color: #7F1D1D; }"
-                )
-            elif texto == "HISTÓRICOS":
-                boton.setStyleSheet(
-                    "QPushButton { font-size: 13px; font-weight: bold; background-color: #0F766E; "
-                    "color: white; border: 1px solid #5EEAD4; border-radius: 6px; padding: 0 5px; }"
-                    "QPushButton:hover { background-color: #0D9488; }"
-                    "QPushButton:pressed { background-color: #115E59; }"
+                    "QPushButton { font-size: 13px; font-weight: bold; "
+                    f"background-color: {background}; color: white; "
+                    f"border: 1px solid {border}; border-radius: 6px; padding: 0 5px; }}"
+                    f"QPushButton:hover {{ background-color: {hover}; }}"
+                    f"QPushButton:pressed {{ background-color: {pressed}; }}"
                 )
             boton.setToolTip({
                 "MOTOR CÁMARA": "Abrir control manual del motor de cámara",
@@ -399,16 +431,15 @@ class MainWindow(QMainWindow):
             puerto = detalle or getattr(self.vfd, "port", None) or "ACTIVO"
             self.estado.setText("●  RS485 CONECTADO")
             self.estado.setStyleSheet(
-                "color: #A7F3D0; background-color: #064E3B; border: 1px solid #059669; "
-                "border-radius: 6px; padding: 0 8px; font-size: 12px; font-weight: bold;"
+                f"{status_label_style(SUCCESS, SUCCESS_BG, '#059669')} "
+                "font-size: 12px;"
             )
             self.estado.setToolTip(f"Comunicación Modbus activa por {puerto}.")
             return
 
         self.estado.setText("●  RS485 SIN CONEXIÓN")
         self.estado.setStyleSheet(
-            "color: #FCA5A5; background-color: #450A0A; border: 1px solid #B91C1C; "
-            "border-radius: 6px; padding: 0 8px; font-size: 12px; font-weight: bold;"
+            f"{status_label_style(ERROR, ERROR_BG, '#B91C1C')} font-size: 12px;"
         )
         self.estado.setToolTip(f"Revise la conexión RS485 y el variador. {detalle or ''}".strip())
 
@@ -652,18 +683,18 @@ class MainWindow(QMainWindow):
         self.lbl_estado_proceso.setText(f"●  {estado}")
         if "EMERGENCIA" in estado or "ABORTADO" in estado or "FALLA" in estado:
             self.lbl_estado_proceso.setStyleSheet(
-                "color: #FECACA; background-color: #7F1D1D; border: 1px solid #EF4444; "
-                "border-radius: 6px; padding: 0 8px; font-size: 13px; font-weight: bold;"
+                status_label_style("#FECACA", "#7F1D1D", "#EF4444")
+                + " font-size: 13px;"
             )
         elif "FINALIZADO" in estado:
             self.lbl_estado_proceso.setStyleSheet(
-                "color: #A7F3D0; background-color: #064E3B; border: 1px solid #059669; "
-                "border-radius: 6px; padding: 0 8px; font-size: 13px; font-weight: bold;"
+                status_label_style("#A7F3D0", "#064E3B", "#059669")
+                + " font-size: 13px;"
             )
         else:
             self.lbl_estado_proceso.setStyleSheet(
-                "color: #FBBF24; background-color: #422006; border: 1px solid #B45309; "
-                "border-radius: 6px; padding: 0 8px; font-size: 13px; font-weight: bold;"
+                status_label_style(WARNING, WARNING_BG, "#B45309")
+                + " font-size: 13px;"
             )
 
     def mostrar_popup_etapa(self, etapa, parametro, valor, unidad):

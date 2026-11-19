@@ -5,7 +5,8 @@ import serial
 import time
 from minimalmodbus import MODE_RTU, Instrument, ModbusException
 from serial.tools import list_ports
-from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -19,6 +20,13 @@ from PySide6.QtWidgets import (
 
 import config
 from modbus.diagnostic_lock import RS485_DIAGNOSTIC_LOCK
+from ui.theme import (
+    ACCENT_TEXT,
+    DIALOG_STYLESHEET,
+    ERROR,
+    SUCCESS,
+    WARNING,
+)
 
 
 _VFD_DEVICES = (
@@ -147,19 +155,7 @@ class RS485TestWindow(QDialog):
         self.setWindowTitle("Prueba RS485 / Modbus - solo lectura")
         self.setFixedSize(760, 340)
         self._worker = None
-        self.setStyleSheet(
-            "QDialog { background-color: #111827; color: #F3F4F6; }"
-            "QLabel { color: #F3F4F6; font-size: 12px; }"
-            "QTableWidget { background-color: #1F2937; color: #F3F4F6; "
-            "gridline-color: #374151; border: 1px solid #4B5563; }"
-            "QHeaderView::section { background-color: #374151; color: white; "
-            "padding: 6px; border: 1px solid #4B5563; font-weight: bold; }"
-            "QPushButton { background-color: #0F766E; color: white; "
-            "border: 1px solid #5EEAD4; border-radius: 5px; padding: 8px; "
-            "font-weight: bold; }"
-            "QPushButton:disabled { background-color: #374151; color: #9CA3AF; }"
-            "QComboBox { background-color: #1F2937; color: white; padding: 6px; }"
-        )
+        self.setStyleSheet(DIALOG_STYLESHEET)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -170,7 +166,9 @@ class RS485TestWindow(QDialog):
             "ni escribe registros."
         )
         title.setWordWrap(True)
-        title.setStyleSheet("font-weight: bold; color: #5EEAD4;")
+        title.setStyleSheet(
+            f"font-weight: bold; color: {ACCENT_TEXT};"
+        )
         layout.addWidget(title)
 
         port_layout = QHBoxLayout()
@@ -219,7 +217,7 @@ class RS485TestWindow(QDialog):
             "0x7002 (bus DC), en los IDs 1 y 2."
         )
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet("color: #FBBF24;")
+        self.result_label.setStyleSheet(f"color: {WARNING};")
         layout.addWidget(self.result_label)
 
         buttons = QHBoxLayout()
@@ -227,7 +225,7 @@ class RS485TestWindow(QDialog):
         self.read_button.clicked.connect(self.start_read_test)
         self.close_button = QPushButton("CERRAR")
         self.close_button.setStyleSheet(
-            "QPushButton { background-color: #374151; border-color: #6B7280; }"
+            "QPushButton { background-color: #303740; border-color: #414B57; }"
         )
         self.close_button.clicked.connect(self.close)
         buttons.addWidget(self.read_button)
@@ -256,7 +254,7 @@ class RS485TestWindow(QDialog):
         port = self.port_combo.currentData()
         if not port:
             self.result_label.setText("No hay un puerto serie seleccionado.")
-            self.result_label.setStyleSheet("color: #F87171;")
+            self.result_label.setStyleSheet(f"color: {ERROR};")
             return
 
         for row in range(self.table.rowCount()):
@@ -269,7 +267,7 @@ class RS485TestWindow(QDialog):
         self.refresh_button.setEnabled(False)
         self.port_combo.setEnabled(False)
         self.result_label.setText(f"Leyendo telemetría en {port}…")
-        self.result_label.setStyleSheet("color: #FBBF24;")
+        self.result_label.setStyleSheet(f"color: {WARNING};")
 
         self._worker = _VFDReadWorker(port, self)
         self._worker.device_result.connect(self._show_device_result)
@@ -289,13 +287,13 @@ class RS485TestWindow(QDialog):
         ):
             self.table.item(row, column).setText(value)
         self.table.item(row, 2).setForeground(
-            Qt.green if status == "RESPONDE" else Qt.yellow
-            if status == "RESPUESTA PARCIAL" else Qt.red
+            QColor(ACCENT_TEXT) if status == "RESPONDE" else QColor(WARNING)
+            if status == "RESPUESTA PARCIAL" else QColor(ERROR)
         )
 
     def _show_finished_message(self, message):
         self.result_label.setText(message)
-        self.result_label.setStyleSheet("color: #34D399;")
+        self.result_label.setStyleSheet(f"color: {SUCCESS};")
 
     def _worker_finished(self):
         self._worker = None

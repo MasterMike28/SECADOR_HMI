@@ -3,6 +3,11 @@ import os
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPainter, QPixmap, QFont, QColor, QPen
 from PySide6.QtCore import Qt, QRect, Signal, QPoint, QPropertyAnimation
+from ui.theme import (
+    ERROR,
+    SUCCESS,
+    WINDOW,
+)
 
 class FlowArrowWidget(QWidget):
     def __init__(self, color_str, parent=None):
@@ -130,7 +135,9 @@ class ProcessView(QWidget):
         if "PUERTA" in self.sensores:
             estado_puerta = "CERRADA" if data.get("puerta_cerrada", True) else "ABIERTA"
             self.sensores["PUERTA"]["valor"] = estado_puerta
-            self.sensores["PUERTA"]["color"] = "#00FF00" if estado_puerta == "CERRADA" else "#FF0000"
+            self.sensores["PUERTA"]["color"] = (
+                SUCCESS if estado_puerta == "CERRADA" else ERROR
+            )
 
         motor_en_marcha = self.vfd_data.get('freq_real', 0) > 0.5
         self.actuadores["M1_CAMARA"]["estado"] = motor_en_marcha
@@ -150,7 +157,7 @@ class ProcessView(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#000000"))
+        painter.fillRect(self.rect(), QColor(WINDOW))
 
         image_rect = self._image_rect()
         if self.background_pixmap:
@@ -160,15 +167,16 @@ class ProcessView(QWidget):
             painter.setFont(QFont("DejaVu Sans", 9, QFont.Bold))
             rect_alarma = QRect(image_rect.x() + 4, image_rect.y() + 5, image_rect.width() - 8, 25)
             if self.timer_blink == 0:
-                painter.setBrush(QColor("#D32F2F")) 
+                painter.setBrush(QColor("#D32F2F"))
                 painter.setPen(Qt.NoPen)
                 painter.drawRect(rect_alarma)
                 painter.setPen(QPen(Qt.white))
                 painter.drawText(rect_alarma, Qt.AlignCenter, f"ALERTA: FALLA EN VARIADOR [COD: {self.vfd_data['alarm']}]")
             else:
-                painter.setBrush(QColor("#000000"))
+                painter.setBrush(QColor(WINDOW))
                 painter.setPen(QPen(QColor("#D32F2F"), 2))
                 painter.drawRect(rect_alarma)
+                painter.setPen(QPen(QColor("#FCA5A5")))
                 painter.drawText(rect_alarma, Qt.AlignCenter, "!!! REVISAR CODIGO DE ERROR EN ELIMEX !!!")
 
         self.sensor_hitboxes.clear()
@@ -199,10 +207,10 @@ class ProcessView(QWidget):
             if rect.bottom() >= self.height() - 2:
                 rect.moveBottom(self.height() - 3)
 
-            painter.setPen(QPen(QColor(data["color"]), 1))
-            painter.setBrush(QColor(7, 12, 20, 190))
+            painter.setPen(QPen(QColor(data["color"]), 2))
+            painter.setBrush(QColor(19, 23, 29, 220))
             painter.drawRoundedRect(rect, 3, 3)
-            painter.setPen(QColor(data["color"]))
+            painter.setPen(QColor("#B7C0C9"))
             label_rect = rect.adjusted(5, 0, -2, 0)
             label_rect.setWidth(metrics.horizontalAdvance(data["nombre"]) + 2)
             value_rect = QRect(label_rect.right() + 2, rect.y(), rect.right() - label_rect.right() - 5, rect.height())
@@ -218,7 +226,7 @@ class ProcessView(QWidget):
             x = int(actuator["pos"][0] * self.width())
             y = int(actuator["pos"][1] * self.height())
             painter.setPen(QPen(QColor("#111827"), 1))
-            painter.setBrush(QColor("#10B981" if active else "#6B7280"))
+            painter.setBrush(QColor(SUCCESS if active else "#707984"))
             painter.drawEllipse(QPoint(x, y), 4, 4)
 
     def mousePressEvent(self, event):

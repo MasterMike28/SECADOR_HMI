@@ -151,7 +151,10 @@ RELAY_CHANNELS = {
 # Entradas GPIO BCM
 # Las asignaciones son preliminares y se deben verificar físicamente.
 # ---------------------------------------------------------------------------
-GPIO_INDUCTIVO = 23
+GPIO_INDUCTIVO = 6  # Sensor inductivo de referencia.
+GPIO_INDUCTIVO_2 = 13
+GPIO_ENCODER_A = 19
+GPIO_ENCODER_B = 26
 GPIO_OPTICO = 24
 GPIO_ESTOP = 17
 GPIO_DOOR_SW = 27
@@ -343,6 +346,9 @@ RECETA_DEFAULT = {
         "frecuencia_aproximacion_m1_hz": DRUM_POSITION_APPROACH_FREQUENCY_HZ,
         "frecuencia_m2_hz": 0.0,
         "gpio_inductivo_referencia": GPIO_INDUCTIVO,
+        "gpio_inductivo_2": GPIO_INDUCTIVO_2,
+        "gpio_encoder_a": GPIO_ENCODER_A,
+        "gpio_encoder_b": GPIO_ENCODER_B,
         "gpio_optico_marca_parada": GPIO_OPTICO,
     },
     EstadoLiofilizadora.COMPLETADO: {

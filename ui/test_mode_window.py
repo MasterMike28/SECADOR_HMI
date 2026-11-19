@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from smbus2 import SMBus, i2c_msg
 from PySide6.QtCore import QSettings, QThread, Signal, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -28,6 +29,13 @@ from instrumentation import INSTRUMENTATION, OPTIONAL_INSTRUMENTATION
 from ui.ebyte_pt100_window import EbytePT100Window
 from ui.gpio_test_window import GPIODirectTestWindow
 from ui.rs485_test_window import RS485TestWindow
+from ui.theme import (
+    ACCENT_TEXT,
+    DIALOG_STYLESHEET,
+    ERROR,
+    SUCCESS,
+    WARNING,
+)
 from ui.waveshare_analog_window import WaveshareAnalogWindow
 
 _I2C_LOCK = threading.Lock()
@@ -94,6 +102,17 @@ def _build_test_inventory():
             (
                 "Sensor inductivo / referencia",
                 f"Confirmar cambio de estado en GPIO {config.GPIO_INDUCTIVO}.",
+                "Pendiente",
+            ),
+            (
+                "Segundo sensor inductivo",
+                f"Confirmar cambio de estado en GPIO {config.GPIO_INDUCTIVO_2}.",
+                "Pendiente",
+            ),
+            (
+                "Encoder incremental A/B",
+                f"Verificar conteo y sentido en GPIO A={config.GPIO_ENCODER_A}, "
+                f"B={config.GPIO_ENCODER_B}.",
                 "Pendiente",
             ),
             (
@@ -243,19 +262,7 @@ class TestModeWindow(QDialog):
         self._output_state_unknown = False
         self._channel_buttons = []
         self._settings = QSettings("SECADOR_HMI", "PuestaEnMarcha")
-        self.setStyleSheet(
-            "QDialog { background-color: #111827; color: #F3F4F6; }"
-            "QLabel { color: #F3F4F6; font-size: 11px; }"
-            "QTableWidget { background-color: #1F2937; color: #F3F4F6; "
-            "gridline-color: #374151; border: 1px solid #4B5563; }"
-            "QHeaderView::section { background-color: #374151; color: white; "
-            "padding: 6px; border: 1px solid #4B5563; font-weight: bold; }"
-            "QPushButton { background-color: #0F766E; color: white; "
-            "border: 1px solid #5EEAD4; border-radius: 5px; padding: 5px; "
-            "font-weight: bold; font-size: 10px; }"
-            "QPushButton:disabled { background-color: #374151; color: #9CA3AF; }"
-            "QCheckBox { color: #FBBF24; font-size: 11px; font-weight: bold; }"
-        )
+        self.setStyleSheet(DIALOG_STYLESHEET)
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(5, 5, 5, 5)
@@ -272,7 +279,7 @@ class TestModeWindow(QDialog):
             "ULN activo con nivel alto."
         )
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 13px; font-weight: bold; color: #5EEAD4;")
+        title.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {ACCENT_TEXT};")
         layout.addWidget(title)
 
         caution = QLabel(
@@ -281,7 +288,7 @@ class TestModeWindow(QDialog):
             "Los nombres de las funciones son provisionales."
         )
         caution.setWordWrap(True)
-        caution.setStyleSheet("color: #F87171; font-weight: bold;")
+        caution.setStyleSheet(f"color: {ERROR}; font-weight: bold;")
         layout.addWidget(caution)
 
         self.contact_loads_isolated = QCheckBox(
@@ -339,7 +346,7 @@ class TestModeWindow(QDialog):
             "al activar. Mantén aisladas las cargas de los contactos."
         )
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet("color: #FBBF24;")
+        self.result_label.setStyleSheet(f"color: {WARNING};")
         layout.addWidget(self.result_label)
 
         buttons = QHBoxLayout()
@@ -354,7 +361,7 @@ class TestModeWindow(QDialog):
         self.read_pt100_button.setMaximumWidth(120)
         self.close_button = QPushButton("CERRAR")
         self.close_button.setStyleSheet(
-            "QPushButton { background-color: #374151; border-color: #6B7280; }"
+            "QPushButton { background-color: #303740; border-color: #414B57; }"
         )
         self.close_button.clicked.connect(self.close)
         buttons.addWidget(self.read_i2c_button)
@@ -378,7 +385,9 @@ class TestModeWindow(QDialog):
             "pines GPIO de la Raspberry Pi."
         )
         title.setWordWrap(True)
-        title.setStyleSheet("font-weight: bold; color: #5EEAD4; font-size: 13px;")
+        title.setStyleSheet(
+            f"font-weight: bold; color: {ACCENT_TEXT}; font-size: 13px;"
+        )
         layout.addWidget(title)
 
         analog_info = QLabel(
@@ -390,7 +399,7 @@ class TestModeWindow(QDialog):
             "VFD del tambor: prueba un equipo a la vez."
         )
         analog_info.setWordWrap(True)
-        analog_info.setStyleSheet("color: #FBBF24;")
+        analog_info.setStyleSheet(f"color: {WARNING};")
         layout.addWidget(analog_info)
 
         self.read_waveshare_button = QPushButton("LEER WAVESHARE — 8 CANALES")
@@ -399,13 +408,14 @@ class TestModeWindow(QDialog):
         layout.addWidget(self.read_waveshare_button)
 
         gpio_info = QLabel(
-            f"Entradas directas BCM {config.GPIO_ESTOP}, "
-            f"{config.GPIO_INDUCTIVO}, {config.GPIO_OPTICO} y "
-            f"{config.GPIO_DOOR_SW}. Usa solo señales adaptadas a 3,3 V; "
-            "leer el pin E-Stop no prueba la cadena cableada."
+            f"Entradas directas: inductivos BCM {config.GPIO_INDUCTIVO} y "
+            f"{config.GPIO_INDUCTIVO_2}; encoder A/B BCM "
+            f"{config.GPIO_ENCODER_A}/{config.GPIO_ENCODER_B}. Usa solo "
+            "señales adaptadas a 3,3 V. La prueba del encoder cuenta pasos "
+            "cuadratura con signo; invertir A/B invierte el sentido mostrado."
         )
         gpio_info.setWordWrap(True)
-        gpio_info.setStyleSheet("color: #FBBF24;")
+        gpio_info.setStyleSheet(f"color: {WARNING};")
         layout.addWidget(gpio_info)
 
         self.read_gpio_button = QPushButton("LEER GPIO DIRECTOS")
@@ -427,7 +437,7 @@ class TestModeWindow(QDialog):
             "copia el informe para compartirlo."
         )
         guidance.setWordWrap(True)
-        guidance.setStyleSheet("color: #FBBF24; font-weight: bold;")
+        guidance.setStyleSheet(f"color: {WARNING}; font-weight: bold;")
         layout.addWidget(guidance)
 
         self.inventory_table = QTableWidget()
@@ -440,7 +450,7 @@ class TestModeWindow(QDialog):
         self.inventory_table.verticalHeader().setVisible(False)
         self.inventory_table.setAlternatingRowColors(True)
         self.inventory_table.setStyleSheet(
-            "QTableWidget { alternate-background-color: #273449; }"
+            "QTableWidget { alternate-background-color: #29313B; }"
         )
         self.inventory_table.setWordWrap(True)
         self.inventory_table.setColumnWidth(0, 185)
@@ -521,10 +531,10 @@ class TestModeWindow(QDialog):
             self.inventory_result_label.setText(
                 "Error: no se pudieron guardar los resultados en este equipo."
             )
-            self.inventory_result_label.setStyleSheet("color: #F87171;")
+            self.inventory_result_label.setStyleSheet(f"color: {ERROR};")
             return
         self.inventory_result_label.setText(f"Resultado guardado: {component}.")
-        self.inventory_result_label.setStyleSheet("color: #34D399;")
+        self.inventory_result_label.setStyleSheet(f"color: {SUCCESS};")
 
     def copy_test_report(self):
         counts = {result: 0 for result in _TEST_RESULTS}
@@ -620,7 +630,7 @@ class TestModeWindow(QDialog):
             self.result_label.setText(
                 "Prueba bloqueada: detén primero el proceso en la HMI."
             )
-            self.result_label.setStyleSheet("color: #F87171;")
+            self.result_label.setStyleSheet(f"color: {ERROR};")
             return
 
         for button in self._channel_buttons:
@@ -635,7 +645,7 @@ class TestModeWindow(QDialog):
             f"Preparando P{channel}/X{channel + 1}/K{channel + 1}; "
             f"mantén pulsado. Corte automático a los {_MAX_HOLD_DURATION_S:.0f} s."
         )
-        self.result_label.setStyleSheet("color: #FBBF24;")
+        self.result_label.setStyleSheet(f"color: {WARNING};")
         self._pulse_worker = _PCF8575HoldWorker(channel, self)
         self._pulse_worker.activated.connect(self._show_output_active)
         self._pulse_worker.completed.connect(self._show_pulse_result)
@@ -652,12 +662,14 @@ class TestModeWindow(QDialog):
 
     def _show_output_active(self, channel):
         self.table.item(channel, 4).setText("ACTIVA")
-        self.table.item(channel, 4).setForeground(Qt.green)
+        self.table.item(channel, 4).setForeground(QColor(SUCCESS))
         self.result_label.setText(
             f"P{channel} alto; ULN X{channel + 1}/K{channel + 1} activado. "
             "Suelta el botón para apagar."
         )
-        self.result_label.setStyleSheet("color: #34D399; font-weight: bold;")
+        self.result_label.setStyleSheet(
+            f"color: {SUCCESS}; font-weight: bold;"
+        )
 
     def _show_i2c_result(self, success, message):
         if success:
@@ -667,20 +679,20 @@ class TestModeWindow(QDialog):
             )
         self.result_label.setText(message)
         self.result_label.setStyleSheet(
-            "color: #FBBF24;" if success else "color: #F87171;"
+            f"color: {WARNING};" if success else f"color: {ERROR};"
         )
 
     def _show_pulse_result(self, channel, success, timed_out, message):
         status = "Auto-apagada" if timed_out else ("Apagada" if success else "DESCONOCIDO")
         self.table.item(channel, 4).setText(status)
         self.table.item(channel, 4).setForeground(
-            Qt.green if success else Qt.red
+            QColor(SUCCESS) if success else QColor(ERROR)
         )
         if not success:
             self._output_state_unknown = True
         self.result_label.setText(message)
         self.result_label.setStyleSheet(
-            "color: #34D399;" if success else "color: #F87171;"
+            f"color: {SUCCESS};" if success else f"color: {ERROR};"
         )
 
     def _i2c_finished(self):

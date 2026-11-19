@@ -2,6 +2,7 @@
 """Ventanas de consulta de alarmas y eventos de proceso."""
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -13,6 +14,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ui.theme import DIALOG_STYLESHEET
+from ui.theme import ERROR, WARNING
+
 
 class _EventTableDialog(QDialog):
     def __init__(self, title, headers, parent=None):
@@ -20,16 +24,20 @@ class _EventTableDialog(QDialog):
         self.setWindowTitle(title)
         self.resize(760, 360)
         self.setStyleSheet(
-            "QDialog { background-color: #111827; color: #F3F4F6; }"
-            "QLabel { color: #F3F4F6; font-size: 13px; }"
-            "QTableWidget { background-color: #1F2937; color: #F3F4F6; "
-            "gridline-color: #374151; border: 1px solid #4B5563; }"
-            "QHeaderView::section { background-color: #374151; color: white; "
-            "padding: 6px; border: 1px solid #4B5563; font-weight: bold; }"
-            "QPushButton { background-color: #374151; color: white; "
-            "border: 1px solid #6B7280; border-radius: 5px; padding: 8px 12px; "
-            "font-weight: bold; }"
-            "QPushButton:hover { background-color: #4B5563; }"
+            DIALOG_STYLESHEET
+            + """
+                QPushButton {
+                    background-color: #374151;
+                    color: white;
+                    border: 1px solid #6B7280;
+                    border-radius: 5px;
+                    padding: 8px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #4B5563;
+                }
+            """
         )
 
         layout = QVBoxLayout(self)
@@ -100,6 +108,10 @@ class AlarmWindow(_EventTableDialog):
                 "Reconocida" if record["acknowledged"] else "Pendiente",
             ),
         )
+        for row in range(self.table.rowCount()):
+            severity = self.table.item(row, 1).text()
+            color = ERROR if severity == "ALTA" else WARNING
+            self.table.item(row, 1).setForeground(QColor(color))
 
     def acknowledge_selected(self):
         rows = sorted({item.row() for item in self.table.selectedItems()})

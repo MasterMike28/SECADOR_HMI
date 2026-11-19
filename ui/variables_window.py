@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ui.theme import DIALOG_STYLESHEET
+
 
 class VariablesWindow(QDialog):
     def __init__(self, data_provider: Callable[[], list[tuple[str, str, object, str]]], parent=None):
@@ -19,22 +21,7 @@ class VariablesWindow(QDialog):
         self.setWindowTitle("Variables del sistema")
         self.resize(700, 520)
         self.setWindowFlags(self.windowFlags() | Qt.Window)
-        self.setStyleSheet("""
-            QDialog { background-color: #111827; color: #F3F4F6; }
-            QLineEdit, QTableWidget {
-                background-color: #1F2937;
-                color: #F3F4F6;
-                border: 1px solid #374151;
-                selection-background-color: #2563EB;
-            }
-            QHeaderView::section {
-                background-color: #374151;
-                color: #FFFFFF;
-                padding: 5px;
-                border: 1px solid #4B5563;
-                font-weight: bold;
-            }
-        """)
+        self.setStyleSheet(DIALOG_STYLESHEET)
 
         layout = QVBoxLayout(self)
         self.search = QLineEdit()
